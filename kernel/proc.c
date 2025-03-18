@@ -273,8 +273,8 @@ int
 fork(void)
 {
   int i, pid;
-  struct proc *np;
-  struct proc *p = myproc();
+  struct proc *np;//child process struct
+  struct proc *p = myproc();//年
 
   // Allocate process.
   if((np = allocproc()) == 0){
