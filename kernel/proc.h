@@ -1,3 +1,6 @@
+#include "types.h"
+#include "param.h"
+#define MASK_SIZE 24
 // Saved registers for kernel context switches.
 struct context {
   uint64 ra;
@@ -105,4 +108,5 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+  char mask[MASK_SIZE];               // Trace Mask
 };
