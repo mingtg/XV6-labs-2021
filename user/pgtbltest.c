@@ -56,15 +56,16 @@ pgaccess_test()
   printf("pgaccess_test starting\n");
   testname = "pgaccess_test";
   buf = malloc(32 * PGSIZE);
-  if (pgaccess(buf, 32, &abits) < 0)
-    err("pgaccess failed");
-  buf[PGSIZE * 1] += 1;
+  if (pgaccess(buf, 32, &abits) < 0)// 获取buf所在的PTE的32项，没有被访问的记录
+    err("pgaccess failed");         // abits按理来说为0
+  buf[PGSIZE * 1] += 1;             // 所在的PTE的FLAG被修改
   buf[PGSIZE * 2] += 1;
   buf[PGSIZE * 30] += 1;
-  if (pgaccess(buf, 32, &abits) < 0)
-    err("pgaccess failed");
+  if (pgaccess(buf, 32, &abits) < 0)// abits的第一位，第二位，第三十位应该置1，代表所在
+    err("pgaccess failed");         // 的PTE被修改过了
   if (abits != ((1 << 1) | (1 << 2) | (1 << 30)))
     err("incorrect access bits set");
   free(buf);
   printf("pgaccess_test: OK\n");
+
 }

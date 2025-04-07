@@ -126,7 +126,12 @@ found:
     release(&p->lock);
     return 0;
   }
-
+  if (0 == (p->ucall = (struct usyscall*)kalloc()))
+  {
+	  freeproc(p);
+	  release(&p->lock);
+	  return 0;
+  }
   // An empty user page table.
   p->pagetable = proc_pagetable(p);
   if(p->pagetable == 0){
@@ -140,7 +145,7 @@ found:
   memset(&p->context, 0, sizeof(p->context));
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
-
+  p->ucall->pid = p->pid;
   return p;
 }
 
@@ -163,6 +168,9 @@ freeproc(struct proc *p)
   p->chan = 0;
   p->killed = 0;
   p->xstate = 0;
+  if(p->ucall)
+    kfree((void*)p->ucall);
+  p->ucall = 0;
   p->state = UNUSED;
 }
 
@@ -195,7 +203,12 @@ proc_pagetable(struct proc *p)
     uvmfree(pagetable, 0);
     return 0;
   }
-
+  if (mappages(pagetable,USYSCALL,PGSIZE,(uint64)(p->ucall),
+                 PTE_U | PTE_R) < 0)
+  {
+	  uvmfree(pagetable,0);
+	  return 0;
+  }
   return pagetable;
 }
 
@@ -206,6 +219,7 @@ proc_freepagetable(pagetable_t pagetable, uint64 sz)
 {
   uvmunmap(pagetable, TRAMPOLINE, 1, 0);
   uvmunmap(pagetable, TRAPFRAME, 1, 0);
+  uvmunmap(pagetable, USYSCALL, 1, 0);
   uvmfree(pagetable, sz);
 }
 
