@@ -105,4 +105,11 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+
+  //System calls added to the user
+  void (*handle)(void);	//函数指针
+  int ttr;				//time to run handle
+
+  struct trapframe prev;		//之前寄存器的状态
+  int alarm_lock;				//在上一次handler返回之前，使之不能再次进入
 };
