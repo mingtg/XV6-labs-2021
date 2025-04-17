@@ -6,6 +6,7 @@
 #include "proc.h"
 #include "defs.h"
 
+extern  int refNum[];
 struct spinlock tickslock;
 uint ticks;
 
@@ -71,7 +72,73 @@ usertrap(void)
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     p->killed = 1;
-  }
+  }/*剩下的一部分都是新加的*/else if (r_scause() == 15) {
+    pte_t* pte; 
+    uint64 va = PGROUNDDOWN(r_stval());
+    
+    if (va >= MAXVA){
+      printf("va is larger than MAXVA!\n");
+      p->killed = 1;
+      goto end;
+    }
+    
+    if (va > p->sz){
+      printf("va is larger than sz!\n");
+      p->killed = 1;
+      goto end;
+    }
+    
+    pte = walk(p->pagetable, va, 0);
+    
+    if(pte == 0 || ((*pte) & PTE_COW) == 0 || ((*pte) & PTE_V) == 0 || ((*pte) & PTE_U)==0){
+      printf("usertrap: pte not exist or it's not cow page\n");
+      p->killed=1;
+      goto end;
+    }
+
+    //printf("------------------------------\n");
+    //printf("pte addr: %p, pte perm: %x\n",pte, PTE_FLAGS(*pte));
+    if(*pte & PTE_COW){
+      //printf("usertrap():got page COW faults at %p\n", va);
+      char *mem;
+      if((mem = kalloc()) == 0)
+      {
+        printf("usertrap(): memery alloc fault\n");
+        p->killed = 1;
+        goto end;
+      }
+      memset(mem, 0, PGSIZE);
+      uint64 pa = walkaddr(p->pagetable, va);
+      if(pa){
+        memmove(mem, (char*)pa, PGSIZE);
+        int perm = PTE_FLAGS(*pte);
+        perm |= PTE_W;
+        perm &= ~PTE_COW;
+        if(mappages(p->pagetable, va, PGSIZE, (uint64)mem, perm) != 0){
+          printf("usertrap(): can not map page\n");
+          kfree(mem); 
+          p->killed = 1;
+          goto end;
+        }
+        /** mem处是新的页，添加一处引用，原来的物理地址减少一处引用  */
+        kfree((void*) pa);
+      }
+      else
+      {
+        printf("usertrap(): can not map va: %p \n", va);
+        p->killed = 1;
+        goto end;
+      }
+    }
+    else
+    {
+      printf("usertrap(): not caused by cow \n");
+      p->killed = 1;
+      goto end;
+    }
+    
+  } 
+
 
   if(p->killed)
     exit(-1);

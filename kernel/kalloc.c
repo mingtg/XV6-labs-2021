@@ -23,6 +23,36 @@ struct {
   struct run *freelist;
 } kmem;
 
+#define NPAGE 32723
+
+char reference[NPAGE];
+
+int
+getrefindex(void *pa){
+  int index = ((char*)pa - (char*)PGROUNDUP((uint64)end)) / PGSIZE;
+  return index;
+}
+
+int
+getref(void *pa){
+  return reference[getrefindex(pa)];
+}
+
+
+void
+addref(char *tip, void *pa){
+  reference[getrefindex(pa)]++;
+}
+
+void
+subref(char *tip,void *pa){
+  int index = getrefindex(pa);
+  if(reference[index] == 0)
+    return;
+  reference[index]--;
+}
+
+
 void
 kinit()
 {
@@ -35,9 +65,14 @@ freerange(void *pa_start, void *pa_end)
 {
   char *p;
   p = (char*)PGROUNDUP((uint64)pa_start);
-  for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE)
+  printf("start ~ end:%p ~ %p\n", p, pa_end);
+  for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE){
+    /** 初始化ref_count  */
+    reference[getrefindex(p)] = 0;
     kfree(p);
+  }
 }
+
 
 // Free the page of physical memory pointed at by v,
 // which normally should have been returned by a
@@ -56,10 +91,23 @@ kfree(void *pa)
 
   r = (struct run*)pa;
 
-  acquire(&kmem.lock);
-  r->next = kmem.freelist;
-  kmem.freelist = r;
-  release(&kmem.lock);
+  subref("kfree()", (void *) pa);
+  int ref_count = getref(pa);
+  if(ref_count == 0){
+    //printf("!\n");
+    memset(pa, 1, PGSIZE);
+    // printf("r->ref_count after: %d\n",((struct run *)pa)->ref_count);
+    // printf("----------------\n");
+    r = (struct run*)pa;
+    //r->ref_count = ref_count;
+    acquire(&kmem.lock);
+    r->next = kmem.freelist;
+    kmem.freelist = r;
+    release(&kmem.lock);
+
+  }
+                        
+/*原文链接：https://blog.csdn.net/weixin_44465434/article/details/111566139*/
 }
 
 // Allocate one 4096-byte page of physical memory.
@@ -76,7 +124,10 @@ kalloc(void)
     kmem.freelist = r->next;
   release(&kmem.lock);
 
-  if(r)
+  if(r){
     memset((char*)r, 5, PGSIZE); // fill with junk
+    int index = getrefindex((void *)r);
+    reference[index] = 1;
+  }
   return (void*)r;
 }

@@ -15,6 +15,8 @@ extern char etext[];  // kernel.ld sets this to end of kernel code.
 
 extern char trampoline[]; // trampoline.S
 
+int refNum[32768];
+
 // Make a direct-map page table for the kernel.
 pagetable_t
 kvmmake(void)
@@ -151,6 +153,9 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
     if(*pte & PTE_V)
       panic("mappages: remap");
     *pte = PA2PTE(pa) | perm | PTE_V;
+    if(pa >= KERNBASE){//页表与物理页绑定时，增加refNum对应元素计数
+      refNum[(pa - KERNBASE)/PGSIZE] += 1;
+    }
     if(a == last)
       break;
     a += PGSIZE;
@@ -178,9 +183,15 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
       panic("uvmunmap: not mapped");
     if(PTE_FLAGS(*pte) == PTE_V)
       panic("uvmunmap: not a leaf");
-    if(do_free){
-      uint64 pa = PTE2PA(*pte);
-      kfree((void*)pa);
+    uint64 pa = PTE2PA(*pte);
+    if(pa >= KERNBASE){
+      refNum[(pa - KERNBASE)/PGSIZE] -= 1;
+    }
+    if(do_free){//页表与物理页解绑时，减少refNum对应元素计数，当refNum==1即仅kernel pagetable持有时，释放内存
+      if(refNum[((uint64)pa - KERNBASE)/PGSIZE] == 1){
+        //uint64 pa = PTE2PA(*pte);
+        kfree((void*)pa);
+      }
     }
     *pte = 0;
   }
@@ -303,7 +314,7 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
+  //char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
@@ -311,15 +322,18 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
+    *pte = (*pte & ~PTE_W) | PTE_COW;
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
+    /*if((mem = kalloc()) == 0)
+      goto err;*/
+    //memmove(mem, (char*)pa, PGSIZE);
+    if(mappages(new, i, PGSIZE, (uint64)pa, flags) != 0){
+      //kfree(mem);
+      printf("uvmcopy():can not map page\n");
       goto err;
     }
   }
+  addref("uvmcopy()", (void*)pa);
   return 0;
 
  err:
@@ -347,9 +361,37 @@ int
 copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 {
   uint64 n, va0, pa0;
-
+  pte_t *pte;
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
+    if(va0 >= MAXVA){
+      //printf("copyout(): va is greater than MAXVA\n");
+      return -1;
+    }
+    pte = walk(pagetable, va0, 0);
+    if(*pte & PTE_COW){
+      //printf("copyout(): got page COW faults at %p\n", va0);
+      char *mem;
+      if((mem = kalloc()) == 0)
+      {
+        printf("copyout(): memery alloc fault\n");
+        return -1;
+      }
+      memset(mem, 0, sizeof(mem));
+      uint64 pa = walkaddr(pagetable, va0);
+      if(pa){
+        memmove(mem, (char*)pa, PGSIZE);
+        int perm = PTE_FLAGS(*pte);
+        perm |= PTE_W;
+        perm &= ~PTE_COW;
+        if(mappages(pagetable, va0, PGSIZE, (uint64)mem, perm) != 0){
+          printf("copyout(): can not map page\n");
+          kfree(mem); 
+          return -1;
+        }
+        kfree((void*) pa);
+      }
+    }
     pa0 = walkaddr(pagetable, va0);
     if(pa0 == 0)
       return -1;
@@ -364,6 +406,7 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
   }
   return 0;
 }
+
 
 // Copy from user to kernel.
 // Copy len bytes to dst from virtual address srcva in a given page table.
