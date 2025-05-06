@@ -95,6 +95,31 @@ e1000_init(uint32 *xregs)
 int
 e1000_transmit(struct mbuf *m)
 {
+  uint32 rear;//指向下一个需要发送的数据包
+
+  acquire(&e1000_lock);
+  // 1.获取下一个需要发送的数据包在环中的索引
+  rear = regs[E1000_TDT];
+  // 2.检查数据块是否带有E1000_TXD_STAT_DD标志，若无则数据还未完成转发
+  if ((tx_ring[rear].status & E1000_TXD_STAT_DD) == 0)
+  {
+    release(&e1000_lock);
+    return -1;
+  }
+  // 3.释放已转发的数据块
+  if (tx_mbufs[rear])
+  {
+    mbuffree(tx_mbufs[rear]);
+  }
+  // 4.设置描述符与缓存区字段
+  tx_ring[rear].addr = (uint64)m->head;
+  tx_ring[rear].length = m->len;
+  tx_ring[rear].cmd = E1000_TXD_CMD_EOP | E1000_TXD_CMD_RS;
+  tx_mbufs[rear] = m;
+  // 5.修改环尾索引
+  regs[E1000_TDT] = (rear + 1) % TX_RING_SIZE;
+
+  release(&e1000_lock);
   //
   // Your code here.
   //
@@ -109,6 +134,29 @@ e1000_transmit(struct mbuf *m)
 static void
 e1000_recv(void)
 {
+  // 1.获取下一个需要接收的数据包在环中的索引
+  uint32 rear = (regs[E1000_RDT] + 1) % RX_RING_SIZE;
+  // 2.检查E1000_TXD_STAT_DD标志
+  while ((rx_ring[rear].status & E1000_TXD_STAT_DD))
+  {
+    if (rx_ring[rear].length > MBUF_SIZE)
+    {
+      panic("E1000 length overflow");
+    }
+    // 3.更新缓冲块信息，递交数据包给网络栈解封装
+    rx_mbufs[rear]->len = rx_ring[rear].length;
+    net_rx(rx_mbufs[rear]);
+    // 4.分配新的缓存区，更新描述符
+    rx_mbufs[rear] = mbufalloc(0);
+    rx_ring[rear].addr = (uint64)rx_mbufs[rear]->head;
+    rx_ring[rear].status = 0;
+
+    rear = (rear + 1) % RX_RING_SIZE;
+  }
+  // 5.修改环尾索引
+  // 此处由于while循环末端让rear = rear - 1了，所以尾指针索引需要减1
+  // 若没有该循环，则此处不需要修改rear，因为尾指针指向的是已被软件处理的数据帧
+  regs[E1000_RDT] = (rear - 1) % RX_RING_SIZE;
   //
   // Your code here.
   //
