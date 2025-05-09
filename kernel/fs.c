@@ -695,7 +695,7 @@ namex(char *path, int nameiparent, char *name)
     iunlockput(ip);
     ip = next;
   }
-  if(nameiparent){
+  if(nameiparent){//查找是否为父目录查找模式
     iput(ip);
     return 0;
   }
