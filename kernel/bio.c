@@ -125,8 +125,10 @@ brelse(struct buf *b)
   b->refcnt--;
   if (b->refcnt == 0) {
     // no one is waiting for it.
+    //将b从链表中删除
     b->next->prev = b->prev;
     b->prev->next = b->next;
+    //将b插入到链表头部
     b->next = bcache.head.next;
     b->prev = &bcache.head;
     bcache.head.next->prev = b;
@@ -143,6 +145,7 @@ bpin(struct buf *b) {
   release(&bcache.lock);
 }
 
+// Decrement b's refcnt.  If it goes to zero, move it to the LRU list.
 void
 bunpin(struct buf *b) {
   acquire(&bcache.lock);
