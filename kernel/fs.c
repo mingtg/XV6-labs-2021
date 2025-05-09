@@ -531,7 +531,7 @@ writei(struct inode *ip, int user_src, uint64 src, uint off, uint n)
   uint tot, m;
   struct buf *bp;
 
-  if(off > ip->size || off + n < off)
+  if(off > ip->size || off + n < off)//off + n < off 考虑整数溢出的情况
     return -1;
   if(off + n > MAXFILE*BSIZE)
     return -1;
@@ -673,24 +673,24 @@ namex(char *path, int nameiparent, char *name)
   struct inode *ip, *next;
 
   if(*path == '/')
-    ip = iget(ROOTDEV, ROOTINO);
+    ip = iget(ROOTDEV, ROOTINO);//从根目录开始寻找
   else
-    ip = idup(myproc()->cwd);
+    ip = idup(myproc()->cwd);//从当前目录开始寻找
 
   while((path = skipelem(path, name)) != 0){
-    ilock(ip);
+    ilock(ip);//锁定根目录或者当前工作目录
     if(ip->type != T_DIR){
       iunlockput(ip);
       return 0;
     }
-    if(nameiparent && *path == '\0'){
+    if(nameiparent && *path == '\0'){//查找父目录并且已经到达文件末尾
       // Stop one level early.
       iunlock(ip);
       return ip;
     }
-    if((next = dirlookup(ip, name, 0)) == 0){
+    if((next = dirlookup(ip, name, 0)) == 0){//查找下一个目录项对应的inode
       iunlockput(ip);
-      return 0;
+      return 0;//查找失败
     }
     iunlockput(ip);
     ip = next;
