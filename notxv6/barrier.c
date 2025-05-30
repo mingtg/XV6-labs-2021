@@ -8,10 +8,10 @@ static int nthread = 1;
 static int round = 0;
 
 struct barrier {
-  pthread_mutex_t barrier_mutex;
-  pthread_cond_t barrier_cond;
-  int nthread;      // Number of threads that have reached this round of the barrier
-  int round;     // Barrier round
+  pthread_mutex_t barrier_mutex;//互斥锁
+  pthread_cond_t barrier_cond;  //条件变量
+  int nthread;      // Number of threads that have reached this round of the barrier  线程计数
+  int round;     // Barrier round 当前轮次
 } bstate;
 
 static void
@@ -73,7 +73,7 @@ main(int argc, char *argv[])
     fprintf(stderr, "%s: %s nthread\n", argv[0], argv[0]);
     exit(-1);
   }
-  nthread = atoi(argv[1]);
+  nthread = atoi(argv[1]);//创建线程数量
   tha = malloc(sizeof(pthread_t) * nthread);
   srandom(0);
 
