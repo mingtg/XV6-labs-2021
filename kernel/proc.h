@@ -1,3 +1,14 @@
+#define VMSIZE 16
+struct vma{
+  int used;
+  uint64 addr;
+  int length;
+  int port;
+  int flags;
+  int fd;
+  int offset;
+  struct file *file;
+};
 // Saved registers for kernel context switches.
 struct context {
   uint64 ra;
@@ -105,4 +116,5 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+  struct vma vma[VMSIZE];
 };

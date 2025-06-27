@@ -5,6 +5,7 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "file.h"
 
 struct spinlock tickslock;
 uint ticks;
@@ -67,12 +68,45 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
+    // ok
+  } else if(r_scause() == 13 || r_scause() == 15) {
+    uint64 va = r_stval();//产生缺页中断的地址
+    if(va >= p->sz || va > MAXVA || PGROUNDUP(va) == PGROUNDDOWN(p->trapframe->sp)) p->killed = 1;
+    else {
+      struct vma *vma = 0;
+      for (int i = 0; i < VMSIZE; i++) {//发生缺页中断的va若存在与vma数组说明是映射的文件
+        if (p->vma[i].used == 1 && va >= p->vma[i].addr && va < p->vma[i].addr + p->vma[i].length) {
+          vma = &p->vma[i];
+          break;
+        }
+      }
+      if(vma) {
+        va = PGROUNDDOWN(va);
+        uint64 offset = va - vma->addr;
+        uint64 mem = (uint64)kalloc();
+        if(mem == 0) {
+          p->killed = 1;
+        } else {
+          memset((void*)mem, 0, PGSIZE);
+          ilock(vma->file->ip);
+          readi(vma->file->ip, 0, mem, offset, PGSIZE);
+          iunlock(vma->file->ip);
+          int flag = PTE_U;
+          if(vma->port & 0x1) flag |= PTE_R;
+          if(vma->port & 0x2) flag |= PTE_W;
+          if(vma->port & 0x4) flag |= PTE_X;
+          if(mappages(p->pagetable, va, PGSIZE, mem, flag) != 0) {
+            kfree((void*)mem);
+            p->killed = 1;
+          }
+        }
+      }
+    }
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     p->killed = 1;
   }
-
   if(p->killed)
     exit(-1);
 

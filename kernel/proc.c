@@ -5,6 +5,7 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "fcntl.h"
 
 struct cpu cpus[NCPU];
 
@@ -313,6 +314,13 @@ fork(void)
 
   acquire(&np->lock);
   np->state = RUNNABLE;
+  for(int i = 0; i < VMSIZE; i++) {
+    if(p->vma[i].used){
+      memmove(&(np->vma[i]), &(p->vma[i]), sizeof(p->vma[i]));
+      filedup(p->vma[i].file);
+    }
+  }
+  release(&np->lock);
   release(&np->lock);
 
   return pid;
@@ -352,7 +360,15 @@ exit(int status)
       p->ofile[fd] = 0;
     }
   }
-
+  for(int i = 0; i < VMSIZE; i++) {
+    if(p->vma[i].used) {
+      if(p->vma[i].flags & MAP_SHARED)
+        filewrite(p->vma[i].file, p->vma[i].addr, p->vma[i].length);
+      fileclose(p->vma[i].file);
+      uvmunmap(p->pagetable, p->vma[i].addr, p->vma[i].length/PGSIZE, 1);
+      p->vma[i].used = 0;
+    }
+  }
   begin_op();
   iput(p->cwd);
   end_op();
