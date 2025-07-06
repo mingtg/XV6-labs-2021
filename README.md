@@ -32,7 +32,7 @@
 
 ### 一、实现标记COW页面
 
-![Uploading image.png…]()
+![Uploading image.png…](https://github.com/mingtg/XV6-labs-2021/blob/cow/image-20250706180035126.png)
 
 
 **查看 RISC-V 的 PTE 标志位，可以看到 RSW 在第 8 - 10 位。标志位的定义在 kernel/riscv.h头文件中，在其中添加 COW标记**
