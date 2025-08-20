@@ -23,7 +23,7 @@
 * 传输层：取出TCP/UDP头，根据四元组“源IP、端口和目的IP、端口”作为标识找到对应的 SOCKET，并把数据放到 SOCKET 的接收缓冲区。
 * 最后应用程序调用 read_socket接口，将内核中 SOCKET 接收缓冲区的数据拷贝到应用层的缓冲区中。
 
-  ![](https://cdn.xiaolincoding.com/gh/xiaolincoder/ImageHost3@main/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/%E6%B5%AE%E7%82%B9/%E6%94%B6%E5%8F%91%E6%B5%81%E7%A8%8B.png)
+  ![image](https://cdn.xiaolincoding.com/gh/xiaolincoder/ImageHost3@main/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/%E6%B5%AE%E7%82%B9/%E6%94%B6%E5%8F%91%E6%B5%81%E7%A8%8B.png)
 
 ## 实现思路
 
